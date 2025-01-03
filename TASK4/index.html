@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Chat Application</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        header {
+            background-color: #6200ea;
+            color: white;
+            padding: 10px;
+            text-align: center;
+        }
+        #chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: row;
+        }
+        #rooms {
+            width: 25%;
+            border-right: 1px solid #ccc;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        #chat {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        #messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            border-bottom: 1px solid #ccc;
+        }
+        #input-container {
+            display: flex;
+            padding: 10px;
+        }
+        #input-container input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #input-container button {
+            margin-left: 10px;
+            padding: 10px;
+            background-color: #6200ea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #input-container button:hover {
+            background-color: #3700b3;
+        }
+        .typing-indicator {
+            font-style: italic;
+            color: #999;
+        }
+        .user-list {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .user-list li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Real-Time Chat</h1>
+    </header>
+    <div id="chat-container">
+        <div id="rooms">
+            <h3>Rooms</h3>
+            <ul id="room-list"></ul>
+            <input type="text" id="new-room" placeholder="Enter new room">
+            <button onclick="joinRoom()">Join</button>
+            <h4>Users in Room</h4>
+            <ul id="user-list" class="user-list"></ul>
+        </div>
+        <div id="chat">
+            <div id="messages"></div>
+            <div id="input-container">
+                <input type="text" id="message" placeholder="Type a message" oninput="showTypingIndicator()">
+                <button onclick="sendMessage()">Send</button>
+            </div>
+            <div id="typing-indicator" class="typing-indicator"></div>
+        </div>
+    </div>
+
+    <script>
+        const ws = new WebSocket('ws://localhost:6789');
+        let username = prompt("Enter your username:");
+        let currentRoom = null;
+
+        ws.onopen = () => {
+            ws.send(JSON.stringify({ action: 'register', username }));
+        };
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'message') {
+                addMessage(`[${data.room}] ${data.from}: ${data.message}`);
+            } else if (data.type === 'private_message') {
+                addMessage(`[Private] ${data.from}: ${data.message}`);
+            } else if (data.type === 'status' || data.type === 'error') {
+                addMessage(`[System] ${data.message}`);
+            } else if (data.type === 'user_joined') {
+                updateUserList(data.room, data.users);
+                addMessage(`[System] ${data.username} has joined the room.`);
+            } else if (data.type === 'user_left') {
+                updateUserList(data.room, data.users);
+                addMessage(`[System] ${data.username} has left the room.`);
+            } else if (data.type === 'typing') {
+                showTypingStatus(data.username);
+            }
+        };
+
+        function joinRoom() {
+            const roomName = document.getElementById('new-room').value;
+            if (roomName) {
+                ws.send(JSON.stringify({ action: 'join_room', username, room_name: roomName }));
+                currentRoom = roomName;
+                document.getElementById('new-room').value = '';
+            }
+        }
+
+        function sendMessage() {
+            const message = document.getElementById('message').value;
+            if (currentRoom && message) {
+                ws.send(JSON.stringify({ action: 'send_room_message', username, room_name: currentRoom, message }));
+                addMessage(`[You]: ${message}`);
+                document.getElementById('message').value = '';
+                hideTypingIndicator();
+            }
+        }
+
+        function addMessage(message) {
+            const messages = document.getElementById('messages');
+            const messageElement = document.createElement('div');
+            messageElement.textContent = message;
+            messages.appendChild(messageElement);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function showTypingIndicator() {
+            if (currentRoom) {
+                ws.send(JSON.stringify({ action: 'typing', room_name: currentRoom, username }));
+            }
+        }
+
+        function showTypingStatus(username) {
+            const typingIndicator = document.getElementById('typing-indicator');
+            typingIndicator.textContent = `${username} is typing...`;
+            setTimeout(() => typingIndicator.textContent = '', 3000);
+        }
+
+        function hideTypingIndicator() {
+            const typingIndicator = document.getElementById('typing-indicator');
+            typingIndicator.textContent = '';
+        }
+
+        function updateUserList(room, users) {
+            const userList = document.getElementById('user-list');
+            userList.innerHTML = '';
+            users.forEach(user => {
+                const userItem = document.createElement('li');
+                userItem.textContent = user;
+                userList.appendChild(userItem);
+            });
+        }
+    </script>
+</body>
+</html>
